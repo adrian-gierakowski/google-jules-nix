@@ -4,21 +4,26 @@ This repository contains a setup script `setup-nix.sh` to install and configure 
 
 ## Usage
 
-1.  **Run the Setup Script**
+1.  **Configure Environment in Google Jules**
 
-    To install Nix with default settings (latest stable), simply run:
+    To use this script and persist the Nix installation across sessions, you must configure it as part of your repository's environment setup in the Google Jules interface.
 
-    ```bash
-    ./setup-nix.sh
-    ```
+    1.  Navigate to [jules.google.com](https://jules.google.com).
+    2.  Select your repository from the **Codebases** list in the left sidebar.
+    3.  Click on the **Configuration** tab at the top of the page.
+    4.  In the **Initial Setup** section, add the following command:
 
-    This script will:
-    -   Install Nix using the Determinate Systems installer (configured for container compatibility).
-    -   Configure `nix.conf` with necessary settings (e.g., disabling sandboxing if needed).
+        ```bash
+        ./setup-nix.sh
+        ```
+
+    5.  Click the **Run and Snapshot** button.
+
+    Google Jules will run the script, verify the output, and create a snapshot of the environment. This snapshot—with Nix installed and configured—will be automatically loaded for all future tasks and sessions for this repository.
 
 2.  **Customizing the Installation**
 
-    You can customize the installation by modifying the variables at the top of `setup-nix.sh` or by setting environment variables.
+    You can customize the installation by setting environment variables in the **Initial Setup** block before the script command.
 
     -   **Pin specific nixpkgs commit:**
         To pin `nixpkgs` to a specific commit (e.g., for reproducibility):
@@ -29,22 +34,16 @@ This repository contains a setup script `setup-nix.sh` to install and configure 
         ```
 
     -   **Add custom nix.conf configuration:**
-        To add extra configuration to `nix.conf`:
+        To add extra configuration to `nix.conf` (e.g., to keep build outputs):
 
         ```bash
         export EXTRA_NIX_CONF="keep-outputs = true"
         ./setup-nix.sh
         ```
 
-3.  **Using Nix**
+3.  **Verifying the Setup**
 
-    After installation, the script will source the necessary profile scripts. For new shell sessions, the Nix environment should be automatically available (setup by the installer in your profile).
-
-## Creating a Custom Environment Snapshot
-
-To persist your Nix installation and configuration across sessions in Google Jules, you should create a custom environment snapshot.
-
-1.  **Run the Setup Script**: Ensure you have run `./setup-nix.sh` and verified your Nix setup is working as desired.
-2.  **Create Snapshot**: Use the Google Jules interface or CLI to create a snapshot of your current environment.
-    *   *Note: Refer to the specific Google Jules documentation for the "Create Snapshot" or "Save Image" action button in your workspace UI.*
-3.  **Use Snapshot**: When starting a new session or workspace, select your custom snapshot. This will restore the environment with Nix already installed and configured.
+    After the **Run and Snapshot** process completes, you can view the output logs in the Jules interface to verify that:
+    -   Nix was installed successfully.
+    -   The version info was printed.
+    -   Your custom configuration was applied.
