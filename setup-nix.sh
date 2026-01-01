@@ -79,8 +79,22 @@ echo "---------------------------------------------------"
 echo "Nix Version:"
 nix --version
 echo "---------------------------------------------------"
+
+if [ -f /etc/nix/nix.conf ]; then
+    echo "Current /etc/nix/nix.conf:"
+    cat /etc/nix/nix.conf
+    echo "---------------------------------------------------"
+fi
+
 if [ -f /etc/nix/nix.custom.conf ]; then
     echo "Current /etc/nix/nix.custom.conf:"
     cat /etc/nix/nix.custom.conf
+    echo "---------------------------------------------------"
+fi
+
+# Check for user-level config
+if [ -f "$HOME/.config/nix/nix.conf" ]; then
+    echo "Current $HOME/.config/nix/nix.conf:"
+    cat "$HOME/.config/nix/nix.conf"
     echo "---------------------------------------------------"
 fi
