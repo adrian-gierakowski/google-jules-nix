@@ -2,6 +2,14 @@
 
 This repository contains a setup script `setup-nix.sh` to install and configure Nix in the Google Jules environment.
 
+## Quick Start
+
+You can run the setup script directly from GitHub using `curl` and `bash`:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/adrian-gierakowski/google-jules-nix/master/setup-nix.sh | bash
+```
+
 ## Usage
 
 1.  **Configure Environment in Google Jules**
