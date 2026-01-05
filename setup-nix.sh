@@ -18,10 +18,21 @@ echo "Starting Nix setup..."
 
 # Install Nix if not already installed
 if ! command -v nix &> /dev/null; then
-    echo "Nix not found. Installing using Determinate Systems installer..."
-    # We disable sandbox and filter-syscalls to avoid issues in some container environments
-    # The installer sets up /etc/nix/nix.conf and includes /etc/nix/nix.custom.conf
-    curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install --no-confirm --extra-conf "sandbox = false" --extra-conf "filter-syscalls = false"
+    echo "Nix not found. Installing using Native Nix installer..."
+
+    # Pre-configure /etc/nix/nix.conf to ensure installation succeeds in container environments
+    # (specifically disabling sandbox and filter-syscalls) and enabling requested features.
+    if [ ! -d /etc/nix ]; then
+        sudo mkdir -p /etc/nix
+    fi
+
+    # We overwrite/create nix.conf to ensure the installer picks up these settings.
+    # The native installer generally respects existing configuration during the process.
+    echo "sandbox = false" | sudo tee /etc/nix/nix.conf > /dev/null
+    echo "filter-syscalls = false" | sudo tee -a /etc/nix/nix.conf > /dev/null
+    echo "experimental-features = nix-command flakes" | sudo tee -a /etc/nix/nix.conf > /dev/null
+
+    curl -L https://nixos.org/nix/install | sh -s -- --daemon --yes
 
     # Source the nix profile to verify installation in this script
     if [ -e "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh" ]; then
@@ -31,13 +42,40 @@ else
     echo "Nix is already installed."
 fi
 
+RESTART_DAEMON=false
+
+# Post-install configuration check
+# The installer might overwrite /etc/nix/nix.conf, so we ensure our settings are present.
+if [ -f /etc/nix/nix.conf ]; then
+    if ! grep -q "sandbox = false" /etc/nix/nix.conf; then
+        echo "Ensuring sandbox = false..."
+        echo "sandbox = false" | sudo tee -a /etc/nix/nix.conf > /dev/null
+        RESTART_DAEMON=true
+    fi
+    if ! grep -q "filter-syscalls = false" /etc/nix/nix.conf; then
+        echo "Ensuring filter-syscalls = false..."
+        echo "filter-syscalls = false" | sudo tee -a /etc/nix/nix.conf > /dev/null
+        RESTART_DAEMON=true
+    fi
+    if ! grep -q "experimental-features = nix-command flakes" /etc/nix/nix.conf; then
+        echo "Ensuring experimental-features = nix-command flakes..."
+        echo "experimental-features = nix-command flakes" | sudo tee -a /etc/nix/nix.conf > /dev/null
+        RESTART_DAEMON=true
+    fi
+else
+    # Fallback if file is missing (unlikely)
+    sudo mkdir -p /etc/nix
+    echo "sandbox = false" | sudo tee /etc/nix/nix.conf > /dev/null
+    echo "filter-syscalls = false" | sudo tee -a /etc/nix/nix.conf > /dev/null
+    echo "experimental-features = nix-command flakes" | sudo tee -a /etc/nix/nix.conf > /dev/null
+    RESTART_DAEMON=true
+fi
+
 # Apply custom configuration
 if [ -n "$EXTRA_NIX_CONF" ]; then
     echo "Applying custom configuration..."
 
     # Ensure nix.custom.conf exists and is included in nix.conf
-    # The DetSys installer usually creates nix.conf with "!include nix.custom.conf"
-
     # Check if nix.custom.conf exists, create if not
     if [ ! -f /etc/nix/nix.custom.conf ]; then
         echo "# Custom Nix configuration" | sudo tee /etc/nix/nix.custom.conf > /dev/null
@@ -48,15 +86,60 @@ if [ -n "$EXTRA_NIX_CONF" ]; then
         echo "Adding include for nix.custom.conf to nix.conf..."
         echo "" | sudo tee -a /etc/nix/nix.conf > /dev/null
         echo "!include nix.custom.conf" | sudo tee -a /etc/nix/nix.conf > /dev/null
+        RESTART_DAEMON=true
     fi
 
     # Append the configuration to nix.custom.conf
     echo "$EXTRA_NIX_CONF" | sudo tee -a /etc/nix/nix.custom.conf > /dev/null
 
+    RESTART_DAEMON=true
+fi
+
+if [ "$RESTART_DAEMON" = true ]; then
     echo "Restarting nix-daemon to apply changes..."
-    if systemctl is-active --quiet nix-daemon; then
-        sudo systemctl restart nix-daemon
+    if command -v systemctl &> /dev/null; then
+         sudo systemctl restart nix-daemon || echo "Warning: Failed to restart nix-daemon."
+    else
+         echo "Warning: systemctl not found. You might need to restart nix-daemon manually."
     fi
+fi
+
+# Ensure nix-daemon is running and accessible
+# In some container environments, systemd might report active but the socket is not visible.
+echo "Verifying nix-daemon connection..."
+SOCKET="/nix/var/nix/daemon-socket/socket"
+if [ ! -S "$SOCKET" ]; then
+    echo "Socket $SOCKET not found. Nix daemon might not be running correctly."
+
+    # Try to start/restart
+    if command -v systemctl &> /dev/null; then
+         echo "Attempting restart via systemctl..."
+         sudo systemctl restart nix-daemon || true
+         sleep 2
+    fi
+
+    if [ ! -S "$SOCKET" ]; then
+         echo "Socket still not found. Trying manual start..."
+         if command -v systemctl &> /dev/null; then
+            # Stop systemd service to avoid conflicts if it thinks it's running
+            sudo systemctl stop nix-daemon nix-daemon.socket || true
+         fi
+
+         DAEMON_BIN="/nix/var/nix/profiles/default/bin/nix-daemon"
+         if [ -x "$DAEMON_BIN" ]; then
+             sudo "$DAEMON_BIN" --daemon > /var/log/nix-daemon.log 2>&1 &
+             sleep 2
+             if [ -S "$SOCKET" ]; then
+                 echo "nix-daemon started manually."
+             else
+                 echo "Failed to start nix-daemon manually. Check /var/log/nix-daemon.log"
+             fi
+         else
+             echo "Error: nix-daemon binary not found at $DAEMON_BIN."
+         fi
+    fi
+else
+    echo "nix-daemon socket found."
 fi
 
 # Configure specific nixpkgs commit if requested
@@ -67,8 +150,6 @@ if [ -n "$NIXPKGS_COMMIT" ]; then
     nix registry pin nixpkgs github:NixOS/nixpkgs/$NIXPKGS_COMMIT
 
     # Also set NIX_PATH for legacy commands if needed
-    # Note: This affects the current session. Persistent setting might require shell profile editing.
-    # We will export it here for the verification step.
     export NIX_PATH="nixpkgs=https://github.com/NixOS/nixpkgs/archive/$NIXPKGS_COMMIT.tar.gz:$NIX_PATH"
 
     echo "Nixpkgs pinned to $NIXPKGS_COMMIT in registry."
