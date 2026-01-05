@@ -157,6 +157,9 @@ echo "---------------------------------------------------"
 echo "Nix Version:"
 nix --version
 echo "---------------------------------------------------"
+echo "Nix Daemon Version:"
+NIX_REMOTE=daemon nix store info -v
+echo "---------------------------------------------------"
 
 if [ -f /etc/nix/nix.conf ]; then
     echo "Current /etc/nix/nix.conf:"
