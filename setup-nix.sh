@@ -149,9 +149,6 @@ if [ -n "$NIXPKGS_COMMIT" ]; then
     # Update the flake registry
     nix registry pin nixpkgs github:NixOS/nixpkgs/$NIXPKGS_COMMIT
 
-    # Also set NIX_PATH for legacy commands if needed
-    export NIX_PATH="nixpkgs=https://github.com/NixOS/nixpkgs/archive/$NIXPKGS_COMMIT.tar.gz:$NIX_PATH"
-
     echo "Nixpkgs pinned to $NIXPKGS_COMMIT in registry."
 fi
 
