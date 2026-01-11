@@ -54,3 +54,17 @@ This repository contains a setup script `setup-nix.sh` to install and configure 
     -   Nix was installed successfully.
     -   The version info was printed.
     -   Your custom configuration was applied.
+
+3.  **Customizing Agent Environment**
+
+    The agent operates within a persistent Bash session that sources standard shell configuration files. This allows you to customize the runtime environment for the agent and any processes it spawns (like `node`, `python`, etc.).
+
+    To add custom environment variables, aliases, or functions, you can modify the `~/.bashrc` or `~/.profile` files in your home directory.
+
+    For example, to ensure a specific environment variable is always available:
+
+    ```bash
+    echo 'export MY_CUSTOM_VAR="my_value"' >> ~/.bashrc
+    ```
+
+    Changes to `~/.bashrc` (for non-login shells) and `~/.profile` (for login shells) are automatically picked up by the agent's session. Note that only **exported** variables (`export VAR=...`) are inherited by child processes executed by the agent.
