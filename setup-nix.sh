@@ -8,11 +8,36 @@ set -e
 # Leave empty to use the default configuration.
 NIXPKGS_COMMIT="${NIXPKGS_COMMIT:-}"
 
+# Set the specific Nix version to install.
+# Example: NIX_VERSION="2.18.1"
+# Leave empty to use the recommended version (latest stable usually).
+NIX_VERSION="${NIX_VERSION:-}"
+
 # Add custom nix.conf content here.
 # Example: EXTRA_NIX_CONF="sandbox = false"
 EXTRA_NIX_CONF="${EXTRA_NIX_CONF:-}"
 
 # --- End Configuration Section ---
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --nix-version)
+      NIX_VERSION="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    --nixpkgs-commit)
+      NIXPKGS_COMMIT="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    *)
+      # unknown option
+      shift # past argument
+      ;;
+  esac
+done
 
 echo "Starting Nix setup..."
 
@@ -32,7 +57,13 @@ if ! command -v nix &> /dev/null; then
     echo "filter-syscalls = false" | sudo tee -a /etc/nix/nix.conf > /dev/null
     echo "experimental-features = nix-command flakes" | sudo tee -a /etc/nix/nix.conf > /dev/null
 
-    curl -L https://nixos.org/nix/install | sh -s -- --daemon --yes
+    INSTALL_URL="https://nixos.org/nix/install"
+    if [ -n "$NIX_VERSION" ]; then
+        INSTALL_URL="https://releases.nixos.org/nix/nix-${NIX_VERSION}/install"
+    fi
+
+    echo "Downloading installer from: $INSTALL_URL"
+    curl -L "$INSTALL_URL" | sh -s -- --daemon --yes
 
     # Source the nix profile to verify installation in this script
     if [ -e "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh" ]; then
