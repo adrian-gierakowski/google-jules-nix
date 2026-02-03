@@ -17,6 +17,10 @@ NIX_VERSION="${NIX_VERSION:-}"
 # Example: EXTRA_NIX_CONF="sandbox = false"
 EXTRA_NIX_CONF="${EXTRA_NIX_CONF:-}"
 
+# Set whether to add jules and root to trusted-users.
+# Default is true.
+CONFIGURE_TRUSTED_USERS="${CONFIGURE_TRUSTED_USERS:-true}"
+
 # --- End Configuration Section ---
 
 # Parse command line arguments
@@ -93,12 +97,42 @@ if [ -f /etc/nix/nix.conf ]; then
         echo "experimental-features = nix-command flakes" | sudo tee -a /etc/nix/nix.conf > /dev/null
         RESTART_DAEMON=true
     fi
+
+    if [ "$CONFIGURE_TRUSTED_USERS" = "true" ]; then
+        echo "Checking trusted-users configuration..."
+        CURRENT_TRUSTED=""
+        if grep -q "^[[:space:]]*trusted-users" /etc/nix/nix.conf; then
+             CURRENT_TRUSTED=$(grep "^[[:space:]]*trusted-users" /etc/nix/nix.conf | tail -1 | cut -d'=' -f2)
+        fi
+
+        ADD_ROOT=true
+        ADD_JULES=true
+
+        for user in $CURRENT_TRUSTED; do
+            if [ "$user" = "root" ]; then ADD_ROOT=false; fi
+            if [ "$user" = "jules" ]; then ADD_JULES=false; fi
+        done
+
+        if [ "$ADD_ROOT" = "true" ] || [ "$ADD_JULES" = "true" ]; then
+             NEW_TRUSTED="$CURRENT_TRUSTED"
+             if [ "$ADD_ROOT" = "true" ]; then NEW_TRUSTED="$NEW_TRUSTED root"; fi
+             if [ "$ADD_JULES" = "true" ]; then NEW_TRUSTED="$NEW_TRUSTED jules"; fi
+
+             echo "Ensuring trusted-users = $NEW_TRUSTED..."
+             echo "trusted-users = $NEW_TRUSTED" | sudo tee -a /etc/nix/nix.conf > /dev/null
+             RESTART_DAEMON=true
+        fi
+    fi
 else
     # Fallback if file is missing (unlikely)
     sudo mkdir -p /etc/nix
     echo "sandbox = false" | sudo tee /etc/nix/nix.conf > /dev/null
     echo "filter-syscalls = false" | sudo tee -a /etc/nix/nix.conf > /dev/null
     echo "experimental-features = nix-command flakes" | sudo tee -a /etc/nix/nix.conf > /dev/null
+
+    if [ "$CONFIGURE_TRUSTED_USERS" = "true" ]; then
+         echo "trusted-users = root jules" | sudo tee -a /etc/nix/nix.conf > /dev/null
+    fi
     RESTART_DAEMON=true
 fi
 
